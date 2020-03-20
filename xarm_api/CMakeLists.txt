@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   genmsg
   xarm_msgs
   sensor_msgs
+  geometry_msgs
 )
 
 set(XARM_API_DIR src/xarm)
@@ -174,6 +175,14 @@ add_executable(move_test
    test/move_test.cpp
 )
 
+add_executable(servo_test
+   test/servo_test.cpp
+)
+
+add_executable(sc_test
+   test/sc_test.cpp
+)
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -201,6 +210,15 @@ target_link_libraries(move_test
    ${catkin_LIBRARIES}
  )
 
+target_link_libraries(servo_test 
+   ${PROJECT_NAME}
+   ${catkin_LIBRARIES}
+ )
+
+target_link_libraries(sc_test 
+   ${PROJECT_NAME}
+   ${catkin_LIBRARIES}
+ )
 #############
 ## Install ##
 #############
