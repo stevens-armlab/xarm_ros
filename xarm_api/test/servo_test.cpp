@@ -1,19 +1,27 @@
 #include "ros/ros.h"
 #include <xarm_driver.h>
 #include "geometry_msgs/Twist.h"
+#include "sensor_msgs/Joy.h"
+
+
+
 using namespace std;
-std::vector<float> desiredPose = {250, 100, 300, 3.14, 0, 0};
-std::vector<float> currentPose = {250, 100, 300, 3.14, 0, 0};
- 
-
-
-
+// declare global messages
 xarm_msgs::SetAxis set_axis_srv_;
 xarm_msgs::SetInt16 set_int16_srv_;
 xarm_msgs::Move move_srv_;
 xarm_msgs::Move move_cart_;
+// declare global services
+ros::ServiceClient set_mode_client_;
+
+// declare global variables
+std::vector<float> desiredPose = {250, 100, 300, 3.14, 0, 0};
+std::vector<float> currentPose = {250, 100, 300, 3.14, 0, 0};
 float cmd_vel[3] = {0,0,0};
 const float VEL_SCALE = 120;
+int button_index_linear_velocity=0;
+int button_index_free_drive=1;
+bool system_initialized = false;
 
 void twist_msg_CB(const geometry_msgs::Twist& msg)
 {		
@@ -30,6 +38,26 @@ void current_pose_CB(const xarm_msgs::RobotMsg& msg)
   }
 }
 
+void joy_msg_CB(const sensor_msgs::Joy& msg)
+{
+  // to do, parse a button
+  if (msg.buttons[button_index_linear_velocity]==1)
+  {
+    set_int16_srv_.request.data = 1;
+    set_mode_client_.call(set_int16_srv_);
+    sleep(1);
+    for(int i=0; i<3;i++)
+    {
+      desiredPose[i] = currentPose[i];
+    }
+  }
+  if (msg.buttons[button_index_free_drive]==1)
+  {
+    set_int16_srv_.request.data = 2;
+    set_mode_client_.call(set_int16_srv_);
+    sleep(1);
+  }
+}
 
 int main(int argc, char **argv)
 {
@@ -43,8 +71,9 @@ int main(int argc, char **argv)
 	ros::Subscriber sub = nh.subscribe("/cmd_vel", 1, twist_msg_CB);
   	ros::Subscriber sub_current_pose = nh.subscribe("/xarm/xarm_states", 1, current_pose_CB);
 	ros::ServiceClient motion_ctrl_client_ = nh.serviceClient<xarm_msgs::SetAxis>("/xarm/motion_ctrl");
-	ros::ServiceClient set_mode_client_ = nh.serviceClient<xarm_msgs::SetInt16>("/xarm/set_mode");
-	ros::ServiceClient set_state_client_ = nh.serviceClient<xarm_msgs::SetInt16>("/xarm/set_state");
+	// ros::ServiceClient set_mode_client_ = nh.serviceClient<xarm_msgs::SetInt16>("/xarm/set_mode");
+	set_mode_client_ = nh.serviceClient<xarm_msgs::SetInt16>("/xarm/set_mode");
+  ros::ServiceClient set_state_client_ = nh.serviceClient<xarm_msgs::SetInt16>("/xarm/set_state");
   	ros::ServiceClient go_home_client_ = nh.serviceClient<xarm_msgs::Move>("/xarm/go_home");
 	ros::ServiceClient move_line_client_ = nh.serviceClient<xarm_msgs::Move>("/xarm/move_line");
 	ros::ServiceClient move_servo_cart_client_ = nh.serviceClient<xarm_msgs::Move>("/xarm/move_servo_cart",true); 
@@ -102,6 +131,8 @@ int main(int argc, char **argv)
     move_cart_.request.mvtime = 0;
     move_cart_.request.mvradii = 0;
 
+    system_initialized = true;
+
     while (true)
     {
    
@@ -113,7 +144,7 @@ int main(int argc, char **argv)
             std::cout << "Desired pos: ";
             std::cout << " x: ";             
             std::cout << desiredPose[0];
-			std::cout << ", y: ";             
+			      std::cout << ", y: ";             
             std::cout << desiredPose[1];
             std::cout << ", z: ";             
             std::cout << desiredPose[2];	
