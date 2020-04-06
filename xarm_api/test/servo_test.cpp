@@ -1,18 +1,45 @@
 #include "ros/ros.h"
 #include <xarm_driver.h>
 #include "geometry_msgs/Twist.h"
+#include "sensor_msgs/Joy.h"
 using namespace std;
 
+// global command variables
 std::vector<float> desiredPose = {355, 62, 630, 3.14, -1.57, 0.0};
-
 std::vector<float> currentPose = {250, 100, 300, 3.14, 0, 0};
- 
+float cmd_vel[3] = {0,0,0};
+const float VEL_SCALE = 120;
+int button_index_linear_velocity=0;
+int button_index_free_drive=1;
+bool system_initialized = false;
+bool switching_mode = false;
+int desired_mode = 0;
+
+// global messages
 xarm_msgs::SetAxis set_axis_srv_;
 xarm_msgs::SetInt16 set_int16_srv_;
 xarm_msgs::Move move_srv_;
 xarm_msgs::Move move_cart_;
-float cmd_vel[3] = {0,0,0};
-const float VEL_SCALE = 120;
+
+
+void joy_msg_CB(const sensor_msgs::Joy& msg)
+{
+  // to do, parse a button
+  if ((msg.buttons[button_index_linear_velocity]==1)&&(system_initialized))
+  {
+    desired_mode = 1;
+    for(int i=0; i<6;i++)
+    {
+      desiredPose[i] = currentPose[i];
+    }
+    switching_mode = true;
+  }
+  if ((msg.buttons[button_index_free_drive]==1)&&(system_initialized))
+  {
+    desired_mode = 2;
+    switching_mode = true;
+  }
+}
 
 void twist_msg_CB(const geometry_msgs::Twist& msg)
 {		
@@ -40,6 +67,7 @@ int main(int argc, char **argv)
 	float system_dt = 1.0/LOOP_RATE_HZ;
 	
 	ros::Subscriber sub = nh.subscribe("/cmd_vel", 1, twist_msg_CB);
+  ros::Subscriber sub_joy = nh.subscribe("/joy", 1, joy_msg_CB);
   ros::Subscriber sub_current_pose = nh.subscribe("/xarm/xarm_states", 1, current_pose_CB);
 	ros::ServiceClient motion_ctrl_client_ = nh.serviceClient<xarm_msgs::SetAxis>("/xarm/motion_ctrl");
 	ros::ServiceClient set_mode_client_ = nh.serviceClient<xarm_msgs::SetInt16>("/xarm/set_mode");
@@ -100,6 +128,8 @@ int main(int argc, char **argv)
   move_cart_.request.mvtime = 0;
   move_cart_.request.mvradii = 0;
 
+  system_initialized=false;
+
   while (ros::ok())
   {
  
@@ -122,8 +152,19 @@ int main(int argc, char **argv)
         ROS_ERROR("Failed to call service move_servo_cart");
 		}
 
-  ros::spinOnce();
-  loop_rate.sleep();
+    if (switching_mode)
+    {
+      set_int16_srv_.request.data = desired_mode;
+      set_mode_client_.call(set_int16_srv_);
+      set_int16_srv_.request.data = 0;
+      set_state_client_.call(set_int16_srv_);
+      sleep(1);
+      switching_mode = false;
+    } else
+    {
+      ros::spinOnce();
+      loop_rate.sleep();
+    }
 
   } 
 
